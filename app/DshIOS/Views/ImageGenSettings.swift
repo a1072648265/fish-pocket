@@ -323,7 +323,7 @@ struct ImageGenMoreSettingsPage: View {
     private var value: JSON { mirror.namespace(ImageGenModel.namespace)?["value"] ?? .null }
 
     var body: some View {
-        listBody
+        AnyView(listBody)
         .groupedList()
         .followSettings()
         .task(id: mirror.stamp) {
@@ -336,22 +336,18 @@ struct ImageGenMoreSettingsPage: View {
     }
 
     private var listBody: some View {
-        List { rows }
+        List {
+            timeoutSection
+            workspaceSection
+            pillSection
+            advancedSection
+            if let failure { Section { Text(failure).foregroundStyle(.red) } }
+            creditsSection
+        }
         .scrollDismissesKeyboard(.immediately)
         .disabled(!mirror.writable)
         .navigationTitle("更多设置")
         .navigationBarTitleDisplayMode(.inline)
-    }
-
-    /// The rows as one tuple: `List` on its own sees a single child, not six.
-    @ViewBuilder
-    private var rows: some View {
-        timeoutSection
-        workspaceSection
-        pillSection
-        advancedSection
-        if let failure { Section { Text(failure).foregroundStyle(.red) } }
-        creditsSection
     }
 
     /// Each section alone, so the checker's budget is spent on one at a time.
