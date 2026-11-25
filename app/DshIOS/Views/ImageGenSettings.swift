@@ -324,6 +324,32 @@ struct ImageGenMoreSettingsPage: View {
 
     var body: some View {
         List {
+            timeoutSection
+            workspaceSection
+            pillSection
+            advancedSection
+            if let failure { Section { Text(failure).foregroundStyle(.red) } }
+            creditsSection
+        }
+        .groupedList()
+        .scrollDismissesKeyboard(.immediately)
+        .disabled(!mirror.writable)
+        .navigationTitle("更多设置")
+        .navigationBarTitleDisplayMode(.inline)
+        .followSettings()
+        .task(id: mirror.stamp) {
+            timeout = String((value["cloudTimeoutMs"].int ?? 150_000) / 1000)
+            folder = value["workspaceFolder"].string ?? "dsh-image-gen"
+            ttl = String(value["requestCacheTtlDays"].int ?? 14)
+            limit = String((value["requestCacheMaxBytes"].int ?? 256 * 1024 * 1024) / (1024 * 1024))
+        }
+        .onDisappear { commitTimeout(); commitFolder(); commitTTL(); commitLimit() }
+    }
+
+    /// Each section on its own. The whole `List` in one body is more type inference than
+    /// Xcode 26.3's checker finishes in its time budget; split, each is small.
+    @ViewBuilder
+    private var timeoutSection: some View {
             Section {
                 LabeledContent("云端生成超时（秒）") {
                     TrailingField(placeholder: "150", text: $timeout, keyboard: .numberPad).onSubmit(commitTimeout)
@@ -332,7 +358,10 @@ struct ImageGenMoreSettingsPage: View {
                 Text("用 API Key 的服务商共用，5–3600 秒，默认 150 秒。")
             }
             .groupedRow()
+    }
 
+    @ViewBuilder
+    private var workspaceSection: some View {
             Section {
                 toggle("保存到工作区", "saveToWorkspace", fallback: true)
                 if value["saveToWorkspace"].bool ?? true {
@@ -344,12 +373,18 @@ struct ImageGenMoreSettingsPage: View {
                 Text("每张图另存一份到当前会话工作区的这个文件夹，留空存在工作区根目录。")
             }
             .groupedRow()
+    }
 
+    @ViewBuilder
+    private var pillSection: some View {
             Section {
                 toggle("网页版输入栏显示生图切换胶囊", "showProviderPill", fallback: false)
             }
             .groupedRow()
+    }
 
+    @ViewBuilder
+    private var advancedSection: some View {
             Section {
                 toggle("严格下载生成结果", "strictImageDownloads", fallback: false)
                 toggle("保留原图", "vaultEnabled", fallback: true)
@@ -368,26 +403,13 @@ struct ImageGenMoreSettingsPage: View {
                 Text("严格下载：服务商返回图片链接时，只从公网地址下载并核对是图片。保留原图：另存服务商给的原始文件（完整 GIF、原始分辨率）。请求缓存：发给服务商的参考图缩放后的副本，超过天数或上限时删掉旧的，上限填 0 表示不限。")
             }
             .groupedRow()
+    }
 
-            if let failure { Section { Text(failure).foregroundStyle(.red) } }
-
+    @ViewBuilder
+    private var creditsSection: some View {
             Section {} footer: {
                 Text("生图由内置的 dsh-image-gen 插件（Apache-2.0）提供。它的灵感库收录了 yang0 的手绘风格手册（github.com/yang0/handraw-style，MIT）、JimLiu/baoyu-skills 的封面构图（MIT）和 freestylefly/awesome-gpt-image-2 的案例集（MIT）。")
             }
-        }
-        .groupedList()
-        .scrollDismissesKeyboard(.immediately)
-        .disabled(!mirror.writable)
-        .navigationTitle("更多设置")
-        .navigationBarTitleDisplayMode(.inline)
-        .followSettings()
-        .task(id: mirror.stamp) {
-            timeout = String((value["cloudTimeoutMs"].int ?? 150_000) / 1000)
-            folder = value["workspaceFolder"].string ?? "dsh-image-gen"
-            ttl = String(value["requestCacheTtlDays"].int ?? 14)
-            limit = String((value["requestCacheMaxBytes"].int ?? 256 * 1024 * 1024) / (1024 * 1024))
-        }
-        .onDisappear { commitTimeout(); commitFolder(); commitTTL(); commitLimit() }
     }
 
     private func toggle(_ title: LocalizedStringKey, _ field: String, fallback: Bool) -> some View {
