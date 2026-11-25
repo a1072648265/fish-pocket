@@ -304,7 +304,7 @@ struct ComposerView: View {
     /// The field itself, the candidate panel above it, and what a draft arriving does to it.
     private var bar: some View {
         let trigger = activeTrigger
-        VStack(alignment: .leading, spacing: 8) {
+        return VStack(alignment: .leading, spacing: 8) {
             if let trigger {
                 CandidatePanel(model: model, context: context, hit: trigger, pick: { pick($0, over: trigger) }, showAll: { refocus = true; browsing = trigger },
                                onReturn: { panelReturn = $0 })
