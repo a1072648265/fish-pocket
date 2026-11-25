@@ -11,9 +11,6 @@ name: Build unsigned IPA
 
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths-ignore: ["docs/**", "**/*.md"]
 
 permissions:
   contents: read
@@ -26,11 +23,7 @@ jobs:
   ipa:
     # Try the newest macOS image first; the matrix lets an unavailable label fall through
     # instead of parking the job in "queued" forever. fail-fast stays off for that reason.
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [xcode-27, macos-26, macos-15]
-    runs-on: ${{ matrix.os }}
+    runs-on: macos-15
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v5
@@ -45,9 +38,7 @@ jobs:
         run: |
           # Take the newest Xcode the image actually has; the project needs 27.x for its
           # SwiftUI type-checking, and an older one fails the build outright.
-          for v in 27.2 27.1 27 26.2 26.1 26; do
-            if [ -d "/Applications/Xcode_$v.app" ]; then sudo xcode-select -s "/Applications/Xcode_$v.app"; break; fi
-          done
+          ls /Applications | grep -i xcode || true
           xcodebuild -version
 
       - name: Cache nodejs-mobile
@@ -122,7 +113,7 @@ jobs:
             -derivedDataPath build/DerivedData -skipPackagePluginValidation \
             ARCHS=arm64 ONLY_ACTIVE_ARCH=NO \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGN_IDENTITY="" EXPANDED_CODE_SIGN_IDENTITY="" \
+            CODE_SIGN_IDENTITY="" EXPANDED_CODE_SIGN_IDENTITY=""`n            OTHER_SWIFT_FLAGS="'$(inherited) -Xfrontend -solver-expression-time-threshold=30000 -Xfrontend -warn-long-expression-type-checking=8000"' \
             PROVISIONING_PROFILE_SPECIFIER="" \
             build
 
