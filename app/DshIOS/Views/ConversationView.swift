@@ -164,8 +164,16 @@ struct ConversationView: View {
     @ViewBuilder
     private func content(_ model: SessionModel) -> some View {
         let blank = isBlank(model)
-        // A conversation that has started: the bar carries its title menu, not the model picker.
         let started = !blank && model.subagentAddress == nil && !(!model.loaded && app.sessions[sessionId]?.blank == true)
+        sheetsOf(model, blank: blank, base:
+            actionsOf(model, base:
+                barred(model, blank: blank, started: started, base:
+                    decked(model, blank: blank, base:
+                        timelineOf(model, blank: blank)))))
+    }
+
+    /// The scroll view and what follows it while it moves.
+    private func timelineOf(_ model: SessionModel, blank: Bool) -> some View {
         ScrollViewReader { proxy in
             ScrollView {
                 TimelineRows {
@@ -267,6 +275,11 @@ struct ConversationView: View {
                 }
             }
         }
+    }
+
+    /// Colour, the dock, the way into the workbench: what sits around the scroll view.
+    private func decked(_ model: SessionModel, blank: Bool, base: some View) -> some View {
+        base
         .background(Palette.background)
         .overlay { if blank { hero(model) } }
         // Above the composer: the transcript and the ✕ while the bar is held to talk.
@@ -324,6 +337,11 @@ struct ConversationView: View {
         // Stated, not left to the default: the workbench's files and changes hide the bar of
         // their own stacks, and without this closing the sheet takes this bar along.
         .toolbar(.visible, for: .navigationBar)
+    }
+
+    /// The navigation bar's items.
+    private func barred(_ model: SessionModel, blank: Bool, started: Bool, base: some View) -> some View {
+        base
         .toolbar {
             if let openDrawer = openDrawer ?? splitSidebar.toggle {
                 ToolbarItem(placement: .topBarLeading) { DrawerButton(action: openDrawer) }
@@ -386,6 +404,11 @@ struct ConversationView: View {
                 }
             }
         }
+    }
+
+    /// What the timeline's actions and the workbench reach.
+    private func actionsOf(_ model: SessionModel, base: some View) -> some View {
+        base
         .environment(\.conversationActions, ConversationActions(actionsBox, .init(
             openChanges: { openWorkbench(.changes) },
             openBrowser: openBrowser,
@@ -410,6 +433,11 @@ struct ConversationView: View {
                 // A pull over the terminal is meant for its scrollback; ✕ closes the sheet.
                 .interactiveDismissDisabled(workbenchTab == .terminal)
         }
+    }
+
+    /// The sheets and the alerts, and the environment the rows read.
+    private func sheetsOf(_ model: SessionModel, blank: Bool, base: some View) -> some View {
+        base
         .fullScreenCover(isPresented: Binding(get: { fullBrowser != nil }, set: { if !$0 { fullBrowser = nil } })) {
             if let fullBrowser {
                 FullScreenBrowser(model: fullBrowser) {
