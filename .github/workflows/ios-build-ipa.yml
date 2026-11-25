@@ -1,11 +1,9 @@
-# Build an UNSIGNED device IPA so it can be signed elsewhere (ESign / Sideloadly / TrollStore).
+# Build an UNSIGNED device IPA (arm64) so it can be signed elsewhere.
 #
-# The stock workflow (ios-build.yml) compiles for the simulator with signing off, which
-# yields a .app that cannot be installed on a phone. This one compiles for arm64 device,
-# still unsigned, then packs Payload/ into an .ipa and uploads it as an artifact.
-#
-# Put this file at .github/workflows/ios-build-ipa.yml in your fork.
-# Actions -> "Build unsigned IPA" -> Run workflow -> download the artifact -> sign it yourself.
+# Pinned to macos-15: xcode-27 / macos-26 are not available as hosted runners, and a job
+# on a missing label parks in "queued" forever. macos-15 ships Xcode 26.x, which is older
+# than what the project is developed against, so the expression solver threshold is raised
+# and long-expression warnings are surfaced instead of failing the build on them.
 
 name: Build unsigned IPA
 
@@ -21,10 +19,8 @@ concurrency:
 
 jobs:
   ipa:
-    # Try the newest macOS image first; the matrix lets an unavailable label fall through
-    # instead of parking the job in "queued" forever. fail-fast stays off for that reason.
     runs-on: macos-15
-    timeout-minutes: 60
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v5
 
@@ -36,8 +32,7 @@ jobs:
 
       - name: Xcode
         run: |
-          # Take the newest Xcode the image actually has; the project needs 27.x for its
-          # SwiftUI type-checking, and an older one fails the build outright.
+          echo "available Xcode installs:"
           ls /Applications | grep -i xcode || true
           xcodebuild -version
 
@@ -103,7 +98,8 @@ jobs:
           command -v xcodegen >/dev/null || brew install xcodegen
           cd app && xcodegen generate --quiet
 
-      # arm64 device, Release, signing fully off.
+      # arm64 device, Release, signing fully off. The solver threshold is what lets Xcode 26
+      # type-check the large SwiftUI bodies the project writes for Xcode 27.
       - name: Compile (iOS device, unsigned)
         working-directory: app
         run: |
@@ -113,8 +109,9 @@ jobs:
             -derivedDataPath build/DerivedData -skipPackagePluginValidation \
             ARCHS=arm64 ONLY_ACTIVE_ARCH=NO \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGN_IDENTITY="" EXPANDED_CODE_SIGN_IDENTITY=""`n            OTHER_SWIFT_FLAGS="'$(inherited) -Xfrontend -solver-expression-time-threshold=30000 -Xfrontend -warn-long-expression-type-checking=8000"' \
+            CODE_SIGN_IDENTITY="" EXPANDED_CODE_SIGN_IDENTITY="" \
             PROVISIONING_PROFILE_SPECIFIER="" \
+            OTHER_SWIFT_FLAGS='$(inherited) -Xfrontend -solver-expression-time-threshold=60000' \
             build
 
       - name: Package IPA
