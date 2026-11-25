@@ -1,9 +1,11 @@
 # Build an UNSIGNED device IPA (arm64) so it can be signed elsewhere.
 #
-# Pinned to macos-15: xcode-27 / macos-26 are not available as hosted runners, and a job
-# on a missing label parks in "queued" forever. macos-15 ships Xcode 26.x, which is older
-# than what the project is developed against, so the expression solver threshold is raised
-# and long-expression warnings are surfaced instead of failing the build on them.
+# macos-15 is the only hosted label that exists for this account; the image ships
+# Xcode 16.x as the DEFAULT toolchain and also has Xcode 26.x installed side by
+# side. `xcodebuild -version` therefore reports 16.4 unless DEVELOPER_DIR is
+# pointed at a 26.x bundle — which is what made an earlier run die on
+# "no such module 'AlarmKit'". The "Select Xcode 26" step below picks the newest
+# installed 26.x and asserts the iOS SDK is >= 26.
 
 name: Build unsigned IPA
 
@@ -20,7 +22,7 @@ concurrency:
 jobs:
   ipa:
     runs-on: macos-15
-    timeout-minutes: 90
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v5
 
@@ -30,11 +32,35 @@ jobs:
           cache: npm
           cache-dependency-path: engine/package-lock.json
 
-      - name: Xcode
+      - name: Select Xcode 26
         run: |
-          echo "available Xcode installs:"
-          ls /Applications | grep -i xcode || true
+          set -euo pipefail
+          echo "installed Xcode bundles:"
+          ls -d /Applications/Xcode*.app || true
+          PICK=""
+          for V in 26.4 26.3 26.3.0 26.2 26.2.0 26.1 26.1.1 26.0 26.0.1; do
+            for C in "/Applications/Xcode_${V}.app" "/Applications/Xcode_${V%.0}.0.app"; do
+              if [ -x "$C/Contents/Developer/usr/bin/xcodebuild" ]; then PICK="$C"; break 2; fi
+            done
+          done
+          if [ -z "$PICK" ]; then
+            for C in /Applications/Xcode*.app; do
+              if /usr/libexec/PlistBuddy -c 'Print :DTXcode' "$C/Contents/Info.plist" 2>/dev/null | grep -q '^26'; then PICK="$C"; fi
+            done
+          fi
+          if [ -z "$PICK" ]; then echo "no Xcode 26.x installed"; ls -d /Applications/Xcode*.app; exit 1; fi
+          echo "DEVELOPER_DIR=$PICK/Contents/Developer" >> "$GITHUB_ENV"
+          echo "picked: $PICK"
+          "$PICK/Contents/Developer/usr/bin/xcodebuild" -version
+          SDK="$("$PICK/Contents/Developer/usr/bin/xcodebuild" -showsdks 2>/dev/null | sed -n 's/.*-sdk iphoneos\([0-9][0-9.]*\).*/\1/p' | sort -n | tail -1)"
+          echo "iphoneos SDK: ${SDK:-unknown}"
+          case "$SDK" in 26.*|27.*) ;; *) echo "iOS SDK $SDK has no AlarmKit"; exit 1 ;; esac
+
+      - name: Toolchain check
+        run: |
+          set -euo pipefail
           xcodebuild -version
+          echo "DEVELOPER_DIR=$DEVELOPER_DIR"
 
       - name: Cache nodejs-mobile
         id: nodejs-mobile
@@ -98,8 +124,6 @@ jobs:
           command -v xcodegen >/dev/null || brew install xcodegen
           cd app && xcodegen generate --quiet
 
-      # arm64 device, Release, signing fully off. The solver threshold is what lets Xcode 26
-      # type-check the large SwiftUI bodies the project writes for Xcode 27.
       - name: Compile (iOS device, unsigned)
         working-directory: app
         run: |
@@ -112,7 +136,15 @@ jobs:
             CODE_SIGN_IDENTITY="" EXPANDED_CODE_SIGN_IDENTITY="" \
             PROVISIONING_PROFILE_SPECIFIER="" \
             OTHER_SWIFT_FLAGS='$(inherited) -Xfrontend -solver-expression-time-threshold=60000' \
-            build
+            build > /tmp/xcodebuild.log 2>&1 || {
+              RC=$?
+              echo "=== build failed, rc=$RC ==="
+              grep -nE "error:|BUILD FAILED|The following build commands failed" /tmp/xcodebuild.log | head -120
+              echo "=== last 80 lines ==="
+              tail -80 /tmp/xcodebuild.log
+              exit $RC
+            }
+          grep -E "BUILD SUCCEEDED" /tmp/xcodebuild.log | tail -3
 
       - name: Package IPA
         shell: bash
@@ -127,6 +159,8 @@ jobs:
           ls -lh out/FishPocket-unsigned.ipa
           echo "bundle id: $(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Info.plist" || true)"
           echo "bundle ver: $(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/Info.plist" || true)"
+          echo "jailbreak plugin in bundle:"
+          ls -l "$APP/engine/plugins/jailbreak/index.mjs" || echo "MISSING jailbreak plugin"
 
       - uses: actions/upload-artifact@v4
         with:
