@@ -410,7 +410,7 @@ struct ImageGenMoreSettingsPage: View {
 
     @ViewBuilder
     private var creditsSection: some View {
-            Section {} footer: {
+            Section { EmptyView() } footer: {
                 Text("生图由内置的 dsh-image-gen 插件（Apache-2.0）提供。它的灵感库收录了 yang0 的手绘风格手册（github.com/yang0/handraw-style，MIT）、JimLiu/baoyu-skills 的封面构图（MIT）和 freestylefly/awesome-gpt-image-2 的案例集（MIT）。")
             }
     }
