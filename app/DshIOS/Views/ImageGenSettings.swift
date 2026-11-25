@@ -323,19 +323,8 @@ struct ImageGenMoreSettingsPage: View {
     private var value: JSON { mirror.namespace(ImageGenModel.namespace)?["value"] ?? .null }
 
     var body: some View {
-        List {
-            timeoutSection
-            workspaceSection
-            pillSection
-            advancedSection
-            if let failure { Section { Text(failure).foregroundStyle(.red) } }
-            creditsSection
-        }
+        listBody
         .groupedList()
-        .scrollDismissesKeyboard(.immediately)
-        .disabled(!mirror.writable)
-        .navigationTitle("更多设置")
-        .navigationBarTitleDisplayMode(.inline)
         .followSettings()
         .task(id: mirror.stamp) {
             timeout = String((value["cloudTimeoutMs"].int ?? 150_000) / 1000)
@@ -346,8 +335,26 @@ struct ImageGenMoreSettingsPage: View {
         .onDisappear { commitTimeout(); commitFolder(); commitTTL(); commitLimit() }
     }
 
-    /// Each section on its own. The whole `List` in one body is more type inference than
-    /// Xcode 26.3's checker finishes in its time budget; split, each is small.
+    private var listBody: some View {
+        List { rows }
+        .scrollDismissesKeyboard(.immediately)
+        .disabled(!mirror.writable)
+        .navigationTitle("更多设置")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    /// The rows as one tuple: `List` on its own sees a single child, not six.
+    @ViewBuilder
+    private var rows: some View {
+        timeoutSection
+        workspaceSection
+        pillSection
+        advancedSection
+        if let failure { Section { Text(failure).foregroundStyle(.red) } }
+        creditsSection
+    }
+
+    /// Each section alone, so the checker's budget is spent on one at a time.
     @ViewBuilder
     private var timeoutSection: some View {
             Section {
