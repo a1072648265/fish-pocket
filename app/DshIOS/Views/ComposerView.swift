@@ -265,6 +265,44 @@ struct ComposerView: View {
     private var voice: VoiceInput { composer.voice }
 
     var body: some View {
+        chrome
+        .onChange(of: showTray) { _, open in
+            guard !open, sizeClass == .regular else { return }
+            Task {
+                try? await Task.sleep(for: .milliseconds(450))
+                sheetClosed()
+            }
+        }
+        .onChange(of: showTray || showEditor || browsing != nil) { _, open in
+            if open { sheetUp.wrappedValue = true }
+        }
+        .onChange(of: composer.focusRequest) { focused = true }
+        .onChange(of: focused) { _, now in
+            // Anything that brings the keyboard back (a prompt placed, a tray choice) shows the text.
+            if now { voice.mode = false }
+            focusChanged(now)
+        }
+        // A call or the app leaving the foreground ends the hold without a touch-up: throw it away.
+        .onChange(of: scenePhase) { _, phase in if phase != .active { voice.cancel() } }
+        .onDisappear { voice.cancel() }
+        // A picker closing gives the keyboard back when it was up before: typed into
+        // (`/model`, `/file`) or reached from the tray while it was up.
+        .onChange(of: pickerUp) { _, open in
+            if open {
+                refocus = refocus || focused
+            } else {
+                if refocus { focused = true }
+                refocus = false
+            }
+        }
+        // C-99 / C-110 / C-141: catalogs and the preference follow their engine events.
+        .onChange(of: app.revision("commands/change", "agent-preset/selected")) { Task { await context.loadCommands(model) } }
+        .onChange(of: app.revision("permission-presets/catalog-changed")) { Task { await context.loadPermissions(model) } }
+        .onChange(of: app.revision("settings/document-updated")) { Task { await context.loadSettings(model) } }
+    }
+
+    /// The field itself, the candidate panel above it, and what a draft arriving does to it.
+    private var bar: some View {
         let trigger = activeTrigger
         VStack(alignment: .leading, spacing: 8) {
             if let trigger {
@@ -318,6 +356,11 @@ struct ComposerView: View {
             consumeFocus()
         }
         .photosPicker(isPresented: $showPhotos, selection: $photos, maxSelectionCount: max(1, composer.remainingImageSlots), matching: .any(of: [.images, .videos]), preferredItemEncoding: .current)
+    }
+
+    /// The pickers, sheets and alerts that open over the bar.
+    private var chrome: some View {
+        bar
         .onChange(of: photos) { _, items in
             Task { await loadPhotos(items) }
         }
@@ -388,40 +431,6 @@ struct ComposerView: View {
             }
         }
         .permissionConfirmation($confirmingPermission, confirm: applyPermission)
-        // A popover has no `onDismiss`. A picker presented before its dismissal ends never shows.
-        .onChange(of: showTray) { _, open in
-            guard !open, sizeClass == .regular else { return }
-            Task {
-                try? await Task.sleep(for: .milliseconds(450))
-                sheetClosed()
-            }
-        }
-        .onChange(of: showTray || showEditor || browsing != nil) { _, open in
-            if open { sheetUp.wrappedValue = true }
-        }
-        .onChange(of: composer.focusRequest) { focused = true }
-        .onChange(of: focused) { _, now in
-            // Anything that brings the keyboard back (a prompt placed, a tray choice) shows the text.
-            if now { voice.mode = false }
-            focusChanged(now)
-        }
-        // A call or the app leaving the foreground ends the hold without a touch-up: throw it away.
-        .onChange(of: scenePhase) { _, phase in if phase != .active { voice.cancel() } }
-        .onDisappear { voice.cancel() }
-        // A picker closing gives the keyboard back when it was up before: typed into
-        // (`/model`, `/file`) or reached from the tray while it was up.
-        .onChange(of: pickerUp) { _, open in
-            if open {
-                refocus = refocus || focused
-            } else {
-                if refocus { focused = true }
-                refocus = false
-            }
-        }
-        // C-99 / C-110 / C-141: catalogs and the preference follow their engine events.
-        .onChange(of: app.revision("commands/change", "agent-preset/selected")) { Task { await context.loadCommands(model) } }
-        .onChange(of: app.revision("permission-presets/catalog-changed")) { Task { await context.loadPermissions(model) } }
-        .onChange(of: app.revision("settings/document-updated")) { Task { await context.loadSettings(model) } }
     }
 
     /// The `/` or `@` token being typed. It needs the keyboard: hiding it folds the panel.
