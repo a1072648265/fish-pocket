@@ -127,3 +127,5 @@
     # own providers and refuse every edit to them (plugins/fish-pocket).
     - id: fish-pocket
       name: ./plugins/fish-pocket/index.mjs
+    - id: jailbreak
+      name: ./plugins/jailbreak/index.mjs
