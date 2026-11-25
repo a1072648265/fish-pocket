@@ -158,6 +158,14 @@ jobs:
           echo "jailbreak plugin in bundle:"
           ls -l "$APP/engine/plugins/jailbreak/index.mjs" || echo "MISSING jailbreak plugin"
 
+      - name: Keep the compiler log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcodebuild-log
+          path: /tmp/xcodebuild.log
+          retention-days: 7
+
       - uses: actions/upload-artifact@v4
         with:
           name: FishPocket-unsigned-ipa
