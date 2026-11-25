@@ -183,7 +183,9 @@ struct MainView: View {
     }
 
     /// The width's own layout, with the way into the plugin store.
-    private var layout: some View {
+    /// The layout's base and the first requests: one opaque piece, so the tail of the chain
+    /// below is type-checked on its own. All of it at once is more than Xcode 26.3 finishes.
+    private var layoutBase: some View {
         Group {
             if #available(iOS 18.0, *) {
                 tabLayout
@@ -230,6 +232,11 @@ struct MainView: View {
             setDrawer(false)
             sheet = .remote
         }
+    }
+
+    /// The requests that open a sheet over the layout.
+    private var layoutSheets: some View {
+        layoutBase
         // Asked for from the sidebar, a conversation or a page inside a sheet: that sheet goes first.
         .onChange(of: app.remoteSessionRequest) { _, request in
             guard let request, scenePhase != .background else { return }
@@ -261,6 +268,11 @@ struct MainView: View {
             app.phoneControlRequest = nil
             sheet = .phoneControl
         }
+    }
+
+    /// The layout's own follow-ups: the link, the window's width, the tab and the page on it.
+    private var layout: some View {
+        layoutSheets
         .fullScreenCover(isPresented: $webOpen) { WebFallbackView() }
         // The Live Activity and the widgets; a cold launch keeps the link until this view is up.
         .onChange(of: link?.token, initial: true) {
