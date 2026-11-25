@@ -60,8 +60,51 @@ struct RemoteConversationView: View {
         }
     }
 
-    @ViewBuilder
     private func content(_ model: RemoteSessionModel) -> some View {
+        decked(model, base: scroller(model))
+        .onChange(of: presented(model)?.id) { _, id in if id != nil { dismissKeyboard() } }
+        .onChange(of: waiting(model)?.id) { old, new in if let new, new != old { Haptics.warning() } }
+        .onChange(of: model.optionsRequest) { panel = .options }
+        // Archived from here or from another device: the main view moves on, as with a local session.
+        .onChange(of: model.meta?.archived) { _, archived in if archived == true { selection = nil } }
+        // Read once it is on screen, and again when a turn ends while it is.
+        .onChange(of: "\(model.meta?.unread == true)-\(scenePhase == .active)", initial: true) {
+            if scenePhase == .active { app.remote.markRead(sessionId) }
+        }
+        .sheet(item: interactionBinding(model)) { sheet(for: $0, model) }
+        .sheet(item: $panel) { panel in
+            Group {
+                switch panel {
+                case .options: RemoteOptionsSheet(model: model)
+                case .info: RemoteInfoSheet(model: model)
+                case .changes: RemoteChangesSheet(model: model)
+                case .files: RemoteFilesSheet(deviceId: model.meta?.deviceId ?? "", root: model.cwd ?? "")
+                }
+            }
+            // These are pages to read and choose from, like 设置: the system's own lists.
+            .environment(\.systemLists, true)
+            .sheetNotices()
+        }
+        .alert(takeoverAsk == true ? "接管这个会话？" : "交还这个会话？", isPresented: Binding(get: { takeoverAsk != nil }, set: { if !$0 { takeoverAsk = nil } }), presenting: takeoverAsk) { enable in
+            Button(enable ? "接管" : "交还") { Task { await model.setTakeover(enable) } }
+            Button("取消", role: .cancel) {}
+        } message: { enable in
+            Text(takeoverMessage(enable, model))
+        }
+        .onChange(of: model.notice) { _, text in
+            guard let text else { return }
+            model.notice = nil
+            app.showToast(text, tone: .warning)
+        }
+        .alert("出错了", isPresented: Binding(get: { model.error != nil }, set: { if !$0 { model.error = nil } })) {
+            Button("好", role: .cancel) {}
+        } message: {
+            Text(model.error ?? "")
+        }
+    }
+
+    /// The scroll view and what it follows.
+    private func scroller(_ model: RemoteSessionModel) -> some View {
         ScrollViewReader { proxy in
             ScrollView {
                 TimelineRows {
@@ -101,6 +144,12 @@ struct RemoteConversationView: View {
                 .animation(.snappy(duration: 0.18), value: atBottom)
             }
         }
+    }
+
+    /// Colour, the dock, the bar and the actions: another opaque piece, so each half of this
+    /// view is type-checked on its own.
+    private func decked(_ model: RemoteSessionModel, base: some View) -> some View {
+        base
         .background(Palette.background)
         .overlay { placeholder(model) }
         .conversationDock {
@@ -145,45 +194,6 @@ struct RemoteConversationView: View {
                 detail = item
             }
         )))
-        .onChange(of: presented(model)?.id) { _, id in if id != nil { dismissKeyboard() } }
-        .onChange(of: waiting(model)?.id) { old, new in if let new, new != old { Haptics.warning() } }
-        .onChange(of: model.optionsRequest) { panel = .options }
-        // Archived from here or from another device: the main view moves on, as with a local session.
-        .onChange(of: model.meta?.archived) { _, archived in if archived == true { selection = nil } }
-        // Read once it is on screen, and again when a turn ends while it is.
-        .onChange(of: "\(model.meta?.unread == true)-\(scenePhase == .active)", initial: true) {
-            if scenePhase == .active { app.remote.markRead(sessionId) }
-        }
-        .sheet(item: interactionBinding(model)) { sheet(for: $0, model) }
-        .sheet(item: $panel) { panel in
-            Group {
-                switch panel {
-                case .options: RemoteOptionsSheet(model: model)
-                case .info: RemoteInfoSheet(model: model)
-                case .changes: RemoteChangesSheet(model: model)
-                case .files: RemoteFilesSheet(deviceId: model.meta?.deviceId ?? "", root: model.cwd ?? "")
-                }
-            }
-            // These are pages to read and choose from, like 设置: the system's own lists.
-            .environment(\.systemLists, true)
-            .sheetNotices()
-        }
-        .alert(takeoverAsk == true ? "接管这个会话？" : "交还这个会话？", isPresented: Binding(get: { takeoverAsk != nil }, set: { if !$0 { takeoverAsk = nil } }), presenting: takeoverAsk) { enable in
-            Button(enable ? "接管" : "交还") { Task { await model.setTakeover(enable) } }
-            Button("取消", role: .cancel) {}
-        } message: { enable in
-            Text(takeoverMessage(enable, model))
-        }
-        .onChange(of: model.notice) { _, text in
-            guard let text else { return }
-            model.notice = nil
-            app.showToast(text, tone: .warning)
-        }
-        .alert("出错了", isPresented: Binding(get: { model.error != nil }, set: { if !$0 { model.error = nil } })) {
-            Button("好", role: .cancel) {}
-        } message: {
-            Text(model.error ?? "")
-        }
     }
 
     private func takeoverMessage(_ enable: Bool, _ model: RemoteSessionModel) -> String {
