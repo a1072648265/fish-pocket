@@ -181,7 +181,7 @@ private struct Pen {
         for point in 0..<10 {
             let radius: CGFloat = point.isMultiple(of: 2) ? 13 : 5.6
             let angle = Double(point) * .pi / 5 - .pi / 2
-            let corner = CGPoint(x: 17 + radius * cos(angle), y: 21 + radius * sin(angle))
+            let corner = CGPoint(x: 17 + radius * CGFloat(cos(angle)), y: 21 + radius * CGFloat(sin(angle)))
             if point == 0 { star.move(to: corner) } else { star.addLine(to: corner) }
         }
         star.closeSubpath()
